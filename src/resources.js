@@ -3232,7 +3232,7 @@ export const plasmidBonus = (function (){
                     plasmids *= 0.025
                 }
                 if (global.race['decayed']){
-                    plasmids -= Math.round((global.stats.days - global.race.decayed) / (300 + global.race.gene_fortify * 6));
+                    // plasmids -= Math.round((global.stats.days - global.race.decayed) / (300 + global.race.gene_fortify * 6));
                 }
                 let p_cap = 250 + global.prestige.Phage.count;
                 if (plasmids > p_cap){
