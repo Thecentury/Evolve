@@ -8,6 +8,7 @@ import { syndicate } from './truepath.js';
 import { govActive, defineGovernor } from './governor.js';
 import { govEffect } from './civics.js';
 import { highPopAdjust, production, teamster } from './prod.js';
+import { toggleBuyOrder, toggleSellOrder, hasBuyOrder, hasSellOrder } from './autoMarket.js';
 import { loc } from './locale.js';
 
 export const resource_values = {
@@ -1404,6 +1405,11 @@ export function marketItem(mount,market_item,name,color,full){
         
         market_item.append($(`<span class="sell"><span class="has-text-danger">${loc('resource_market_sell')}</span></span>`));
         market_item.append($(`<span role="button" class="order" @click="sell('${name}')">\${{ r.value | sell }}</span>`));
+
+        if (full){
+            market_item.append($(`<span role="button" class="autoOrderBtn abuy ${hasBuyOrder(name) ? 'active' : ''}" :aria-label="autoBuyLabel('${name}')" @click="orderBuy('${name}', $event)">${loc('auto_market_btn_buy')}</span>`));
+            market_item.append($(`<span role="button" class="autoOrderBtn asell ${hasSellOrder(name) ? 'active' : ''}" :aria-label="autoSellLabel('${name}')" @click="orderSell('${name}', $event)">${loc('auto_market_btn_sell')}</span>`));
+        }
     }
 
     if (full && ((global.race['banana'] && name === 'Food') || (global.tech['trade'] && !global.race['terrifying']))){
@@ -1536,6 +1542,20 @@ export function marketItem(mount,market_item,name,color,full){
                         }
                     }
                 }
+            },
+            orderBuy(res, ev){
+                let active = toggleBuyOrder(res);
+                $(ev.currentTarget).toggleClass('active', active);
+            },
+            orderSell(res, ev){
+                let active = toggleSellOrder(res);
+                $(ev.currentTarget).toggleClass('active', active);
+            },
+            autoBuyLabel(res){
+                return loc(hasBuyOrder(res) ? 'auto_market_toggle_buy_off' : 'auto_market_toggle_buy_on',[global.resource[res].name]);
+            },
+            autoSellLabel(res){
+                return loc(hasSellOrder(res) ? 'auto_market_toggle_sell_off' : 'auto_market_toggle_sell_on',[global.resource[res].name]);
             },
             autoBuy(res, keyMult = keyMultiplier()){
                 for (let i=0; i<keyMult; i++){

@@ -5301,6 +5301,72 @@ div.bigbang {
     scrollbar-width: thin;
 }
 
+.autoMarket {
+    margin-bottom: .5rem;
+
+    h2 {
+        font-size: 1rem;
+        font-weight: bold;
+    }
+
+    .autoOrderList {
+        list-style: none;
+        margin: 0;
+
+        .autoOrder {
+            display: flex;
+            align-items: center;
+            padding: 0 .25rem;
+
+            .cancel {
+                cursor: pointer;
+                margin-right: .35rem;
+                font-size: .75rem;
+            }
+        }
+
+        .autoOrder:hover {
+            background-color: rgba(128, 128, 128, 0.15);
+        }
+    }
+}
+
+.autoOrderBtn {
+    cursor: pointer;
+    margin-left: .35rem;
+    padding: 0 .35rem;
+    border: 1px solid #999;
+    border-radius: .25rem;
+    font-size: .7rem;
+    opacity: 0.55;
+
+    &.active {
+        opacity: 1;
+        font-weight: bold;
+        border-color: currentColor;
+    }
+
+    &.abuy { color: @bulma-success; }
+    &.asell { color: @bulma-danger; }
+}
+
+.autoBldBtn {
+    cursor: pointer;
+    display: inline-block;
+    width: 1rem;
+    text-align: center;
+    margin-right: .25rem;
+    opacity: 0.5;
+    border: 1px solid transparent;
+    border-radius: .2rem;
+
+    &.active {
+        opacity: 1;
+        font-weight: bold;
+        border-color: currentColor;
+    }
+}
+
 .modal .modal-content {
     width: initial;
     min-width: 42rem;

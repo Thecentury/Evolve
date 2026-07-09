@@ -4,6 +4,7 @@ import { unlockAchieve, checkAchievements, drawAchieve, alevel, universeAffix, c
 import { gameLoop, vBind, popover, clearPopper, flib, tagEvent, timeCheck, arpaTimeCheck, timeFormat, powerModifier, resetResBuffer, modRes, initMessageQueue, messageQueue, calc_mastery, calcPillar, darkEffect, calcQueueMax, calcRQueueMax, buildQueue, shrineBonusActive, getShrineBonus, eventActive, easterEggBind, trickOrTreatBind, powerGrid, deepClone, addATime, exceededATimeThreshold, loopTimers, calcQuantumLevel, drawPet } from './functions.js';
 import { races, traits, racialTrait, orbitLength, servantTrait, randomMinorTrait, biomes, planetTraits, shapeShift, fathomCheck, blubberFill, cleanRemoveTrait } from './races.js';
 import { defineResources, resource_values, spatialReasoning, craftCost, plasmidBonus, faithBonus, faithTempleCount, tradeRatio, craftingRatio, crateValue, containerValue, tradeSellPrice, tradeBuyPrice, atomic_mass, supplyValue, galaxyOffers } from './resources.js';
+import { initAutoMarket, autoMarketTick, drawAutoMarket } from './autoMarket.js';
 import { defineJobs, job_desc, loadFoundry, farmerValue, jobName, jobScale, workerScale, limitCraftsmen, loadServants} from './jobs.js';
 import { defineIndustry, f_rate, manaCost, setPowerGrid, gridEnabled, gridDefs, nf_resources, replicator, luxGoodPrice, smelterUnlocked, smelterFuelConfig, setupRituals, maxRitualNum, ritual_types } from './industry.js';
 import { checkControlling, garrisonSize, armyRating, govTitle, govCivics, govEffect, weaponTechModifer } from './civics.js';
@@ -283,7 +284,9 @@ if (global.city['replicator'] && global.race?.replicator?.pow && global.race?.go
 defineJobs(true);
 defineResources();
 initTabs();
+initAutoMarket();
 buildQueue();
+drawAutoMarket();
 if (global.race['shapeshifter']){
     shapeShift(false,true);
 }
@@ -8132,6 +8135,7 @@ function fastLoop(){
 
 function midLoop(){
     const astroSign = astrologySign();
+    autoMarketTick();
     if (global.race.species === 'protoplasm'){
         let base = 100;
         if (global.stats.achieve['mass_extinction'] && global.stats.achieve['mass_extinction'].l > 1){

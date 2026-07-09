@@ -937,6 +937,7 @@ export function index(){
             <div class="power"><span id="powerStatus" class="has-text-warning" v-show="city.powered"><span>MW</span> <span id="powerMeter" class="meter">{{ city.power | replicate | approx }}</span></span></div>
         </div>
         <div id="sideQueue">
+            <div id="autoMarket" class="autoMarket has-text-info"></div>
             <div id="buildQueue" class="bldQueue standardqueuestyle has-text-info" v-show="display"></div>
             <div id="msgQueue" class="msgQueue vscroll has-text-info" aria-live="polite">
                 <div id="msgQueueHeader">

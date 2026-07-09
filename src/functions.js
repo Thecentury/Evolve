@@ -13,6 +13,7 @@ import { universeLevel, universeAffix, alevel } from './achieve.js';
 import { astrologySign, astroVal } from './seasons.js';
 import { shipCosts, TPShipDesc } from './truepath.js';
 import { mechCost, mechDesc } from './portal.js';
+import { toggleBuildingOrder, hasBuildingOrder } from './autoMarket.js';
 
 var popperRef = false;
 export function popover(id,content,opts){
@@ -461,7 +462,7 @@ export function buildQueue(){
     let queue = $(`<ul class="buildList"></ul>`);
     $('#buildQueue').append(queue);
 
-    queue.append($(`<li v-for="(item, index) in queue"><a v-bind:id="setID(index)" class="has-text-warning queued" v-bind:class="{ 'qany': item.qa }" @click="remove(index)" role="link"><span v-bind:class="setData(index,'res')" v-bind="setData(index,'data')">{{ item.label }}{{ item.q | count }}</span> [<span v-bind:class="{ 'has-text-danger': item.cna, 'has-text-success': !item.cna }">{{ item.time | time }}{{ item.t_max | max_t(item.time) }}</span>]</a></li>`));
+    queue.append($(`<li v-for="(item, index) in queue"><span role="button" class="autoBldBtn" v-bind:class="{ active: orderActive(index) }" :aria-label="autoOrderLabel(index)" @click.stop="autoOrder(index, $event)">$</span><a v-bind:id="setID(index)" class="has-text-warning queued" v-bind:class="{ 'qany': item.qa }" @click="remove(index)" role="link"><span v-bind:class="setData(index,'res')" v-bind="setData(index,'data')">{{ item.label }}{{ item.q | count }}</span> [<span v-bind:class="{ 'has-text-danger': item.cna, 'has-text-success': !item.cna }">{{ item.time | time }}{{ item.t_max | max_t(item.time) }}</span>]</a></li>`));
 
     try {
         vBind({
@@ -541,6 +542,21 @@ export function buildQueue(){
                 },
                 pausedesc(){
                     return global.queue.pause ? loc('queue_play') : loc('queue_pause');
+                },
+                autoOrder(index, ev){
+                    let q = global.queue.queue[index];
+                    if (!q){ return; }
+                    let active = toggleBuildingOrder(q.id, q.label);
+                    $(ev.currentTarget).toggleClass('active', active);
+                },
+                orderActive(index){
+                    let q = global.queue.queue[index];
+                    return q ? hasBuildingOrder(q.id) : false;
+                },
+                autoOrderLabel(index){
+                    let q = global.queue.queue[index];
+                    if (!q){ return ''; }
+                    return loc(hasBuildingOrder(q.id) ? 'auto_market_toggle_bld_off' : 'auto_market_toggle_bld_on',[q.label]);
                 }
             },
             filters: {
