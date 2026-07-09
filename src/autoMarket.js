@@ -33,6 +33,14 @@ const SELL_THRESHOLD = 0.90;
 // A sell only happens when the resource is at least 90% of its max stock.
 const STOCK_THRESHOLD = 0.90;
 
+// The auto-market is paced to real wall-clock time (about once per second), independent of how often
+// the game's mid loop fires. The mid loop runs ~1/s in normal time, but ~2/s under accelerated time and
+// in fast bursts during catch-up, so we gate on elapsed real time instead of on the loop itself.
+const TICK_INTERVAL = 1000; // ms
+// Small tolerance so a mid loop landing a few ms early (timer jitter) still counts as "a second passed".
+const TICK_TOLERANCE = 50; // ms
+let lastTick = 0;
+
 // Per-resource price history: { [res]: { buy: number[], sell: number[] } }. Transient, never persisted.
 const priceHistory = {};
 
@@ -320,6 +328,13 @@ function findQueueStruct(id){
 /*********************** Tick ***********************/
 
 export function autoMarketTick(){
+    if (typeof window !== 'undefined'){ window.__amCalls = (window.__amCalls || 0) + 1; }
+    // Throttle to ~once per real second regardless of how many times the mid loop fires this second.
+    let now = performance.now();
+    if (now - lastTick < TICK_INTERVAL - TICK_TOLERANCE){ return; }
+    lastTick = now;
+    if (typeof window !== 'undefined'){ window.__amRuns = (window.__amRuns || 0) + 1; }
+
     if (!tradeAllowed() || !global.resource.Money){ return; }
     if (orderCount() === 0){ return; }
 
