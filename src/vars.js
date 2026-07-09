@@ -2046,6 +2046,11 @@ export function convertVersion(version){
 
 export function resizeGame(){
     if ($(window).width() >= 1400 && $('#msgQueue:not(.right)')){
+        // Auto Orders block sits directly above the build queue, in whichever pane the queue lives.
+        let auto = $('#autoMarket').detach();
+        auto.addClass('right');
+        auto.removeClass('has-text-info');
+
         let build = $('#buildQueue').detach();
         build.addClass('right');
         build.removeClass('has-text-info');
@@ -2055,6 +2060,7 @@ export function resizeGame(){
         queue.removeClass('has-text-info');
         queue.css('resize', 'none');
         $('#queueColumn').addClass('is-one-quarter');
+        $('#queueColumn').append(auto);
         $('#queueColumn').append(build);
         $('#queueColumn').append(queue);
         $('#mainColumn').removeClass('is-three-quarters');
@@ -2062,6 +2068,10 @@ export function resizeGame(){
 
     }
     else if ($(window).width() < 1400 && $('#msgQueue').hasClass('right')){
+        let auto = $('#autoMarket').detach();
+        auto.removeClass('right');
+        auto.addClass('has-text-info');
+
         let build = $('#buildQueue').detach();
         build.removeClass('right');
         build.addClass('has-text-info');
@@ -2071,6 +2081,7 @@ export function resizeGame(){
         queue.addClass('has-text-info');
         queue.css('resize', 'vertical');
         $('#queueColumn').removeClass('is-one-quarter');
+        $('#sideQueue').append(auto);
         $('#sideQueue').append(build);
         $('#sideQueue').append(queue);
         $('#mainColumn').removeClass('is-half');

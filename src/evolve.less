@@ -5309,6 +5309,10 @@ div.bigbang {
         font-weight: bold;
     }
 
+    &.right {
+        padding: 0 1rem;
+    }
+
     .autoOrderList {
         list-style: none;
         margin: 0;
@@ -5365,6 +5369,12 @@ div.bigbang {
         font-weight: bold;
         border-color: currentColor;
     }
+}
+
+// When the queue lives in the right pane, the Auto Orders block is its first child and
+// needs the same top offset the build queue normally uses to align with the tab bar.
+.queueCol .autoMarket.right:first-child {
+    margin-top: 2.625rem;
 }
 
 .modal .modal-content {
