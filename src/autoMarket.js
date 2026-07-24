@@ -328,12 +328,10 @@ function findQueueStruct(id){
 /*********************** Tick ***********************/
 
 export function autoMarketTick(){
-    if (typeof window !== 'undefined'){ window.__amCalls = (window.__amCalls || 0) + 1; }
     // Throttle to ~once per real second regardless of how many times the mid loop fires this second.
     let now = performance.now();
     if (now - lastTick < TICK_INTERVAL - TICK_TOLERANCE){ return; }
     lastTick = now;
-    if (typeof window !== 'undefined'){ window.__amRuns = (window.__amRuns || 0) + 1; }
 
     if (!tradeAllowed() || !global.resource.Money){ return; }
     if (orderCount() === 0){ return; }
@@ -369,11 +367,16 @@ export function autoMarketTick(){
             let res = autoMarket.building[id].res;
             if (res){ buyTargets[res] = true; }
         });
+        let moneyMaxed = global.resource.Money.amount >= global.resource.Money.max;
         Object.keys(buyTargets).forEach(function(res){
             if (!isBuyable(res)){ return; }
             let low = windowLow(res, 'buy');
             if (low === null){ return; }
-            if (marketBuyPrice(res) <= low * BUY_THRESHOLD){
+            let price = marketBuyPrice(res);
+            if (price > low * BUY_THRESHOLD){ return; }
+            // Never buy in portions when money is short: only buy if the money on hand covers the full
+            // selected quantity, or if money is already maxed out (it can't grow, so spend what fits).
+            if (global.resource.Money.amount >= price * qty || moneyMaxed){
                 doPurchase(res, qty);
             }
         });
