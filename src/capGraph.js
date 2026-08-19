@@ -12,7 +12,8 @@
  */
 import { global, sizeApproximation } from './vars.js';
 import { loc } from './locale.js';
-import { actions, checkAffordable, storageMultipler } from './actions.js';
+import { actions, checkAffordable, checkTechQualifications, storageMultipler } from './actions.js';
+import { techPath } from './tech.js';
 import { adjustCosts } from './functions.js';
 import { spatialReasoning, crateValue, containerValue } from './resources.js';
 import { tpStorageMultiplier } from './truepath.js';
@@ -135,16 +136,62 @@ function normRes(res){
     return res === 'global.race.species' ? global.race.species : res;
 }
 
-// Would this building ever be offered in the current run?
-function plausible(action){
-    if (!action){ return false; }
-    if (action.path){
-        const cPath = global.race['truepath'] ? 'truepath' : 'standard';
-        if (!action.path.includes(cPath)){ return false; }
-    }
-    if (action.trait && !action.trait.every(t => global.race[t])){ return false; }
+function currentPath(){
+    return global.race['truepath'] ? 'truepath' : 'standard';
+}
+
+// Exactly the gate setAction() applies before drawing a building, plus the
+// standard/truepath split. Anything that fails this is never offered to the
+// player, so recommending it would be nonsense. checkTechQualifications also
+// covers the one-off builds — World Collider and friends declare a condition()
+// that goes false once they are finished.
+// The subset of those checks that cannot throw, used when condition() cannot
+// be evaluated.
+function declarativeOk(action){
     if (action.not_trait && action.not_trait.some(t => global.race[t])){ return false; }
+    if (action.trait && !action.trait.every(t => global.race[t])){ return false; }
+    if (action.not_gene && action.not_gene.some(g => global.genes[g])){ return false; }
+    if (action.gene && !action.gene.every(g => global.genes[g])){ return false; }
+    if (action.not_tech && action.not_tech.some(t => global.tech[t])){ return false; }
     return true;
+}
+
+function available(action){
+    if (!action){ return false; }
+    if (action.path && !action.path.includes(currentPath())){ return false; }
+    try { return checkTechQualifications(action); }
+    catch (e){
+        // condition() commonly reads the struct, which does not exist until the
+        // building is unlocked — that throw means "future building", not
+        // "unavailable", so fall back to the checks that cannot throw.
+        return declarativeOk(action);
+    }
+}
+
+// Same idea for research: era has to be on the current path, and the tech's
+// own condition()/trait gates have to pass.
+function techAvailable(t){
+    if (!t){ return false; }
+    const path = currentPath();
+    const list = techPath[path] || [];
+    if ((!list.includes(t.era) && !t.hasOwnProperty('path')) || (t.hasOwnProperty('path') && !t.path.includes(path))){
+        return false;
+    }
+    try { return checkTechQualifications(t); }
+    catch (e){ return declarativeOk(t); }
+}
+
+// How many more of this can still be built, or null when unlimited. Some
+// queue_complete() implementations assume the struct exists, hence the guard.
+function remainingBuilds(entry){
+    const action = entry.action;
+    if (!action.queue_complete){ return null; }
+    try {
+        const n = action.queue_complete();
+        // A few return NaN or a boolean when their state is not set up yet.
+        return Number.isFinite(n) ? n : null;
+    }
+    catch (e){ return null; }
 }
 
 // A building is offerable once its tech requirements are met; the struct only
@@ -204,9 +251,15 @@ function sourcesFor(res){
     const push = (spec) => {
         const entry = resolveSource(spec);
         if (!entry || seen.has(entry.path)){ return; }
-        if (!plausible(entry.action)){ return; }
+        // Nothing the player constructs: appears on its own, or is a finished
+        // one-off like the completed World Collider (queue_complete() === 0).
+        if (Object.keys(entry.action.cost || {}).length === 0){ return; }
+        const left = remainingBuilds(entry);
+        if (left !== null && left <= 0){ return; }
+        if (!available(entry.action)){ return; }
+        if (unreachable(entry.action)){ return; }
         seen.add(entry.path);
-        out.push({ entry, powered: !!spec.powered });
+        out.push({ entry, powered: !!spec.powered, remaining: left });
     };
 
     (capSources[res] || []).forEach(spec => { if (!spec.tech){ push(spec); } });
@@ -266,12 +319,36 @@ function techChain(reqs, acc, seen){
         for (const g of grants){
             if (g.level <= have || g.level > want){ continue; }
             if (seen.has(g.key)){ continue; }
+            // Never route the player through research or a mission that this
+            // run cannot reach.
+            if (g.kind === 'tech' ? !techAvailable(g.action) : !available(g.action)){ continue; }
             seen.add(g.key);
             techChain(g.action.reqs, acc, seen);
             acc.push(g);
         }
     }
     return acc;
+}
+
+// True when a requirement can never be satisfied in this run: something does
+// grant the flag, but nothing that grants it is reachable (Soul Well, for
+// instance, is unlocked by a tech restricted to soul-eater races). A flag with
+// no known granter at all is left alone — the source is simply outside this
+// index, and guessing "unreachable" would hide legitimate options.
+function unreachable(action){
+    if (!action || !action.reqs){ return false; }
+    buildGrantIndex();
+    for (const flag of Object.keys(action.reqs)){
+        const have = global.tech[flag] || 0;
+        const want = action.reqs[flag];
+        if (have >= want){ continue; }
+        const grants = grantIndex[flag] || [];
+        if (grants.length === 0){ continue; }
+        const usable = grants.some(g => g.level > have && g.level <= want
+            && (g.kind === 'tech' ? techAvailable(g.action) : available(g.action)));
+        if (!usable){ return true; }
+    }
+    return false;
 }
 
 function techKnowledgeBlock(techAction){
@@ -287,7 +364,8 @@ function techKnowledgeBlock(techAction){
  * Blocker analysis
  * ------------------------------------------------------------------ */
 
-export function capBlockers(c_action){
+// The stockpiled-resource part of an action's cost, resolved to numbers.
+function costEntries(c_action){
     if (!c_action || !c_action.cost){ return []; }
     let costs;
     try { costs = adjustCosts(c_action); }
@@ -304,12 +382,26 @@ export function capBlockers(c_action){
         try { need = Number(costs[res]()) || 0; }
         catch (e){ continue; }
         if (need <= 0){ continue; }
-        const cap = Number(r.max);
-        if (cap >= 0 && need > cap){
-            out.push({ res: target, need, cap });
-        }
+        out.push({ res: target, need, cap: Number(r.max), have: Number(r.amount), display: !!r.display });
     }
     return out;
+}
+
+export function capBlockers(c_action){
+    return costEntries(c_action)
+        .filter(c => c.display && c.cap >= 0 && c.need > c.cap)
+        .map(c => ({ res: c.res, need: c.need, cap: c.cap }));
+}
+
+// Costs in a resource the player has not unlocked at all. The game refuses the
+// build for these too, but no amount of storage will fix it.
+function lockedResources(c_action){
+    return costEntries(c_action).filter(c => !c.display).map(c => c.res);
+}
+
+// Costs the player simply has not accumulated yet, with the caps already fine.
+function shortResources(c_action){
+    return costEntries(c_action).filter(c => c.display && c.have < c.need);
 }
 
 function crateOptions(res, deficit, depth){
@@ -367,7 +459,7 @@ function planForResource(res, need, cap, depth, seen){
     for (const src of sourcesFor(res)){
         const entry = src.entry;
         if (seen.has(entry.path)){ continue; }
-        const node = describeBuild(entry, src.powered, res, deficit);
+        const node = describeBuild(entry, src.powered, res, deficit, src.remaining);
         // The cap we are already solving is not news as one of its blockers.
         if (node.subBlockers){
             node.subBlockers = node.subBlockers.filter(b => !seen.has('res:' + b.res));
@@ -376,12 +468,12 @@ function planForResource(res, need, cap, depth, seen){
     }
 
     // Buildable-now first, then unlocked, then the shortest research chains.
-    const rank = { ready: 0, 'need-res': 1, 'need-cap': 2, 'need-tech': 3 };
-    plan.builds.sort((a, b) => (rank[a.status] - rank[b.status]) || (a.chain.length - b.chain.length));
+    const rank = { ready: 0, 'need-res': 1, 'need-cap': 2, 'need-tech': 3, 'no-res': 4 };
+    plan.builds.sort((a, b) => (rank[a.status] - rank[b.status]) || (chainDepth(a) - chainDepth(b)));
 
     // Anything behind a very long research chain is noise unless it is all
     // that is left.
-    const near = plan.builds.filter(b => b.chain.length <= FAR_CHAIN);
+    const near = plan.builds.filter(b => chainDepth(b) <= FAR_CHAIN);
     if (near.length > 0){
         plan.hidden = plan.builds.length - near.length;
         plan.builds = near;
@@ -416,8 +508,16 @@ function planForResource(res, need, cap, depth, seen){
     return plan;
 }
 
+// A locked building whose unlock route this index cannot see is further away
+// than any known chain, not closer — some flags are set imperatively inside a
+// tech's action() rather than declared as a grant.
+function chainDepth(node){
+    if (node.status !== 'need-tech'){ return node.chain.length; }
+    return node.chain.length === 0 ? Infinity : node.chain.length;
+}
+
 // Phase 1: what is this building and what stands in its way. Cheap.
-function describeBuild(entry, powered, res, deficit){
+function describeBuild(entry, powered, res, deficit, remaining){
     const action = entry.action;
     const node = {
         kind: 'build',
@@ -429,16 +529,22 @@ function describeBuild(entry, powered, res, deficit){
         powered,
         count: countOf(entry),
         unlocked: isUnlocked(entry),
+        remaining: typeof remaining === 'number' ? remaining : null,
         chain: [],
         blockers: [],
         status: 'ready',
-        needCount: null
+        needCount: null,
+        short: []
     };
 
     const per = perUnitGain(entry, res);
     if (per){
         node.per = per;
         node.needCount = Math.ceil(deficit / per);
+        // A capped build cannot be recommended past its own limit.
+        if (node.remaining !== null && node.needCount > node.remaining){
+            node.capped = true;
+        }
     }
 
     if (!node.unlocked){
@@ -449,17 +555,27 @@ function describeBuild(entry, powered, res, deficit){
             title: titleOf(g.action),
             knowledge: g.kind === 'tech' ? techKnowledgeBlock(g.action) : null
         }));
+        return node;
     }
-    else if (checkAffordable(action)){
-        node.status = 'ready';
+
+    // Derived from the same cost walk as the sub-blockers, so the label and
+    // the reasons underneath it can never disagree.
+    const locked = lockedResources(action);
+    if (locked.length > 0){
+        node.status = 'no-res';
+        node.lockedRes = locked;
+        return node;
     }
-    else if (checkAffordable(action, true)){
-        node.status = 'need-res';
-    }
-    else {
+
+    const blockers = capBlockers(action);
+    if (blockers.length > 0){
         node.status = 'need-cap';
-        node.subBlockers = capBlockers(action);
+        node.subBlockers = blockers;
+        return node;
     }
+
+    node.short = shortResources(action);
+    node.status = node.short.length === 0 ? 'ready' : 'need-res';
     return node;
 }
 
@@ -502,9 +618,10 @@ export function analyze(c_action){
 
 const STATUS_LABEL = {
     'ready':     ['cgOk',   'can build now'],
-    'need-res':  ['cgWarn', 'affordable eventually — just needs resources'],
+    'need-res':  ['cgWarn', 'caps are fine — still saving up'],
     'need-cap':  ['cgBad',  'blocked by another cap'],
-    'need-tech': ['cgLock', 'locked']
+    'need-tech': ['cgLock', 'locked'],
+    'no-res':    ['cgLock', 'needs a resource you have not unlocked']
 };
 
 function renderCrate(opt){
@@ -540,11 +657,14 @@ function renderBuild(node, depth){
     const [cls, label] = STATUS_LABEL[node.status] || ['', ''];
     const meta = [];
     if (node.count > 0){ meta.push(`${node.count} built`); }
+    if (node.remaining !== null){ meta.push(`${node.remaining} more possible`); }
     if (node.powered){ meta.push('must be powered'); }
 
     let effect = '';
     if (node.needCount !== null){
-        effect = `+${fmt(node.per)} each → <b>build ${node.needCount} more</b>`;
+        effect = node.capped
+            ? `+${fmt(node.per)} each → <b>${node.remaining} more</b> is all this can give, not enough on its own`
+            : `+${fmt(node.per)} each → <b>build ${node.needCount} more</b>`;
     }
     else if (node.effect){
         effect = node.effect;
@@ -552,10 +672,19 @@ function renderBuild(node, depth){
 
     let kids = '';
     if (node.status === 'need-tech'){
-        kids += renderChain(node.chain);
+        kids += node.chain.length > 0
+            ? renderChain(node.chain)
+            : `<div class="cgNote">unlock route not tracked here — a later-game or alternate-path unlock</div>`;
     }
     for (const plan of node.blockers){
         kids += renderPlan(plan, depth + 1);
+    }
+    if (node.status === 'need-res' && node.short.length > 0){
+        const bits = node.short.map(c => `${esc(resName(c.res))} ${fmt(c.have)}/${fmt(c.need)}`).join(', ');
+        kids += `<div class="cgNote">still short: ${bits}</div>`;
+    }
+    if (node.status === 'no-res'){
+        kids += `<div class="cgNote">needs ${node.lockedRes.map(r => esc(resName(r))).join(', ')}, which you have not unlocked</div>`;
     }
     if (node.status === 'need-cap' && node.blockers.length === 0 && node.subBlockers){
         const names = node.subBlockers.map(b => esc(resName(b.res))).join(', ');
@@ -584,18 +713,20 @@ function bestAdvice(plan){
             return `Assign <b>${c.need}</b> ${esc(c.title)} — you have ${c.free} spare.`;
         }
     }
-    const counted = plan.builds.find(b => b.needCount !== null && (b.status === 'ready' || b.status === 'need-res'));
+    const counted = plan.builds.find(b => b.needCount !== null && !b.capped
+        && (b.status === 'ready' || b.status === 'need-res'));
     if (counted){
         const verb = counted.status === 'ready' ? 'Build' : 'Save up and build';
         return `${verb} <b>${counted.needCount}</b> more × <b>${esc(counted.title)}</b>.`;
     }
-    const ready = plan.builds.find(b => b.status === 'ready');
+    const ready = plan.builds.find(b => b.status === 'ready' && !b.capped);
     if (ready){
         return `Build more <b>${esc(ready.title)}</b>.`;
     }
-    const soon = plan.builds.find(b => b.status === 'need-res');
+    const soon = plan.builds.find(b => b.status === 'need-res' && !b.capped);
     if (soon){
-        return `Save up for <b>${esc(soon.title)}</b> — nothing else is in the way.`;
+        const bits = soon.short.map(c => `${esc(resName(c.res))} ${fmt(c.have)}/${fmt(c.need)}`).join(', ');
+        return `Save up for <b>${esc(soon.title)}</b>${bits ? ` — still short: ${bits}` : ''}.`;
     }
     const locked = plan.builds.find(b => b.status === 'need-tech' && b.chain.length > 0);
     if (locked){
@@ -722,13 +853,13 @@ const CSS = `
 #capGraphModal .cgNode.cg-ready { border-left-color:#7fbf7f; }
 #capGraphModal .cgNode.cg-need-res { border-left-color:#d1c07a; }
 #capGraphModal .cgNode.cg-need-cap { border-left-color:#d18f4a; }
-#capGraphModal .cgNode.cg-need-tech { border-left-color:#6f8fbf; }
+#capGraphModal .cgNode.cg-need-tech, #capGraphModal .cgNode.cg-no-res { border-left-color:#6f8fbf; }
 #capGraphModal .cgDot { position:absolute; left:-.3125rem; top:.625rem; width:.5rem; height:.5rem;
     border-radius:50%; background:#444; }
 #capGraphModal .cg-ready > .cgRow > .cgDot { background:#7fbf7f; }
 #capGraphModal .cg-need-res > .cgRow > .cgDot { background:#d1c07a; }
 #capGraphModal .cg-need-cap > .cgRow > .cgDot { background:#d18f4a; }
-#capGraphModal .cg-need-tech > .cgRow > .cgDot { background:#6f8fbf; }
+#capGraphModal .cg-need-tech > .cgRow > .cgDot, #capGraphModal .cg-no-res > .cgRow > .cgDot { background:#6f8fbf; }
 #capGraphModal .cgName { font-weight:bold; }
 #capGraphModal .cgMeta, #capGraphModal .cgStatus { font-size:.75rem; margin-left:.5rem; opacity:.8; }
 #capGraphModal .cgRegion { font-size:.6875rem; margin-left:.375rem; opacity:.55; font-style:italic; }
