@@ -510,7 +510,7 @@ const STATUS_LABEL = {
 function renderCrate(opt){
     const enough = opt.free >= opt.need;
     const bits = [];
-    bits.push(`<b>${opt.need}</b> &times; ${esc(opt.title)}`);
+    bits.push(`<b>${opt.need}</b> × ${esc(opt.title)}`);
     bits.push(`+${fmt(opt.per)} each`);
     bits.push(`${opt.free} spare, ${opt.assigned} already here`);
     return `<div class="cgNode ${enough ? 'cg-ready' : 'cg-need-res'}">
@@ -519,7 +519,7 @@ function renderCrate(opt){
             <span class="cgName">${esc(opt.title)}</span>
             <span class="cgStatus ${enough ? 'cgOk' : 'cgWarn'}">${enough ? 'available now' : 'build more first'}</span>
         </div>
-        <div class="cgEffect">${bits.join(' &middot; ')}</div>
+        <div class="cgEffect">${bits.join(' · ')}</div>
     </div>`;
 }
 
@@ -528,9 +528,9 @@ const CHAIN_SHOWN = 4;
 function renderChain(chain){
     if (chain.length === 0){ return ''; }
     const shown = chain.slice(0, CHAIN_SHOWN);
-    let names = shown.map(t => `<span class="${t.kind === 'tech' ? 'cgTech' : 'cgMission'}">${esc(t.title)}</span>`).join('<span class="cgArrow">&rarr;</span>');
+    let names = shown.map(t => `<span class="${t.kind === 'tech' ? 'cgTech' : 'cgMission'}">${esc(t.title)}</span>`).join('<span class="cgArrow">→</span>');
     if (chain.length > shown.length){
-        names += `<span class="cgArrow">&rarr;</span><span class="cgMore">${chain.length - shown.length} more</span>`;
+        names += `<span class="cgArrow">→</span><span class="cgMore">${chain.length - shown.length} more</span>`;
     }
     const label = chain.every(t => t.kind === 'tech') ? 'research' : 'unlock via';
     return `<div class="cgChain"><span class="cgChainLabel">${label}</span>${names}</div>`;
@@ -544,7 +544,7 @@ function renderBuild(node, depth){
 
     let effect = '';
     if (node.needCount !== null){
-        effect = `+${fmt(node.per)} each &rarr; <b>build ${node.needCount} more</b>`;
+        effect = `+${fmt(node.per)} each → <b>build ${node.needCount} more</b>`;
     }
     else if (node.effect){
         effect = node.effect;
@@ -570,7 +570,7 @@ function renderBuild(node, depth){
             <span class="cgDot"></span>
             <span class="cgName">${esc(node.title)}</span>
             ${node.region ? `<span class="cgRegion">${esc(node.region)}</span>` : ''}
-            ${meta.length ? `<span class="cgMeta">${esc(meta.join(' &middot; ').replace(/&amp;middot;/g, '&middot;'))}</span>` : ''}
+            ${meta.length ? `<span class="cgMeta">${esc(meta.join(' · '))}</span>` : ''}
             <span class="cgStatus ${cls}">${label}</span>
         </div>
         ${effect ? `<div class="cgEffect">${effect}</div>` : ''}
@@ -581,13 +581,13 @@ function renderBuild(node, depth){
 function bestAdvice(plan){
     for (const c of plan.crates){
         if (c.free >= c.need){
-            return `Assign <b>${c.need}</b> ${esc(c.title)} &mdash; you have ${c.free} spare.`;
+            return `Assign <b>${c.need}</b> ${esc(c.title)} — you have ${c.free} spare.`;
         }
     }
     const counted = plan.builds.find(b => b.needCount !== null && (b.status === 'ready' || b.status === 'need-res'));
     if (counted){
         const verb = counted.status === 'ready' ? 'Build' : 'Save up and build';
-        return `${verb} <b>${counted.needCount}</b> more &times; <b>${esc(counted.title)}</b>.`;
+        return `${verb} <b>${counted.needCount}</b> more × <b>${esc(counted.title)}</b>.`;
     }
     const ready = plan.builds.find(b => b.status === 'ready');
     if (ready){
@@ -595,7 +595,7 @@ function bestAdvice(plan){
     }
     const soon = plan.builds.find(b => b.status === 'need-res');
     if (soon){
-        return `Save up for <b>${esc(soon.title)}</b> &mdash; nothing else is in the way.`;
+        return `Save up for <b>${esc(soon.title)}</b> — nothing else is in the way.`;
     }
     const locked = plan.builds.find(b => b.status === 'need-tech' && b.chain.length > 0);
     if (locked){
@@ -609,7 +609,7 @@ function renderPlan(plan, depth){
     const head = depth === 0
         ? `<div class="cgHead">
                <span class="cgResName">${esc(resName(plan.res))}</span>
-               cap <b>${fmt(plan.cap)}</b> &middot; need <b>${fmt(plan.need)}</b> &middot;
+               cap <b>${fmt(plan.cap)}</b> · need <b>${fmt(plan.need)}</b> ·
                short by <b class="cgBad">${fmt(plan.deficit)}</b>
            </div>
            <div class="cgAdvice">${bestAdvice(plan)}</div>`
@@ -617,7 +617,7 @@ function renderPlan(plan, depth){
                cap raised from <b>${fmt(plan.cap)}</b> to <b>${fmt(plan.need)}</b></div>`;
 
     if (plan.truncated){
-        return `${head}<div class="cgNote">chain continues &mdash; open this building's own explainer to go deeper</div>`;
+        return `${head}<div class="cgNote">chain continues — open this building's own explainer to go deeper</div>`;
     }
 
     const opts = [];
@@ -626,7 +626,7 @@ function renderPlan(plan, depth){
     plan.crates.filter(c => c.free < c.need).forEach(c => opts.push(renderCrate(c)));
     plan.techs.forEach(t => opts.push(`<div class="cgNode cg-need-tech">
         <div class="cgRow"><span class="cgDot"></span><span class="cgName">${esc(t)}</span>
-        <span class="cgStatus cgLock">research only &mdash; no building</span></div></div>`));
+        <span class="cgStatus cgLock">research only — no building</span></div></div>`));
 
     const more = plan.hidden > 0
         ? `<div class="cgNote">${plan.hidden} further source${plan.hidden === 1 ? ' exists' : 's exist'} much later in the game.</div>`
@@ -685,7 +685,7 @@ export function openCapModal(sector, key){
     const check = setInterval(function(){
         if ($('#modalBox').length === 0){ return; }
         clearInterval(check);
-        $('#modalBox').append(`<p id="modalBoxTitle" class="has-text-warning modalTitle">${esc(titleOf(c_action))} &mdash; capacity blockers</p>`);
+        $('#modalBox').append(`<p id="modalBoxTitle" class="has-text-warning modalTitle">${esc(titleOf(c_action))} — capacity blockers</p>`);
         const body = $('<div id="capGraphModal" class="modalBody"></div>');
         body.html(renderModal(c_action, plans));
         $('#modalBox').append(body);
