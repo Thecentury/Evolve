@@ -6277,6 +6277,10 @@ export function setAction(c_action,action,type,old,prediction){
             </svg></div>`);
         parent.append(special);
     }
+    // capGraph: explains which resource caps block this build (see src/capGraph.js).
+    if (!old && c_action['cost']){
+        parent.append($(`<div class="capBlock" role="button" title="Why can't I build this?" data-cg-sector="${action}" data-cg-key="${type}">?</div>`));
+    }
     if (c_action['on'] || c_action['off']){
         if (c_action['on']){
             let powerOn = $(`<span class="on" title="ON" v-html="$options.filters.val('on')"></span>`);
